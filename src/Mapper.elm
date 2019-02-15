@@ -41,7 +41,7 @@ map files descriptors =
                                         { messages = []
                                         , enums = List.map (enum syntax Nothing) descriptor.enumType
                                         , maps = []
-                                        , imports = dependencies fileDict descriptor.dependency
+                                        , imports = List.filter ((/=) pkg) <| dependencies fileDict descriptor.dependency
                                         }
                                     |> append (concatMap (message syntax pkg Nothing) descriptor.messageType)
                             )

@@ -238,9 +238,9 @@ enum value =
     , exposedDecoders = []
     , exposedEncoders = []
     , models =
-        [ "{-| "
+        [ "{-| `"
             ++ value.dataType
-            ++ "\n-}"
+            ++ "` enumeration\n-}"
             ++ "\ntype "
             ++ value.dataType
             ++ "\n    = "
@@ -331,58 +331,81 @@ message enumDefaults cyclicMessageMap value =
             , exposedEncoders = exposedEncoder
             , models =
                 [ """
-{-| {{ dataType }}
+{-| `{{ dataType }}` message
 -}
 type alias {{ dataType }} =
-    { {{ fields }}
-    }
+    {{ fields }}
     """
                     |> String.trim
                     |> interpolate "dataType" value.dataType
-                    |> interpolate "fields" (String.join "\n    , " <| List.map (recordField cyclicFields) value.fields)
+                    |> interpolate "fields"
+                        (case value.fields of
+                            [] ->
+                                "{}"
+
+                            fields ->
+                                "{ " ++ (String.join "\n    , " <| List.map (recordField cyclicFields) fields) ++ "\n    }"
+                        )
                 ]
             , decoders =
                 [ """
-{{ header }}
-{{ decoder }} : Decode.Decoder {{ dataType }}
+{{ header }}{{ decoder }} : Decode.Decoder {{ dataType }}
 {{ decoder }} =
-    Decode.message ({{ dataType }} {{ defaults }})
-        [ {{ fields }}
-        ]
+    Decode.message {{ default }}
+        {{ fields }}
             """
                     |> String.trim
                     |> interpolate "header"
                         (if value.isTopLevel then
-                            "{-| " ++ decoder_ ++ "\n-}"
+                            "{-| `" ++ value.dataType ++ "` decoder\n-}\n"
 
                          else
                             ""
                         )
                     |> interpolate "decoder" decoder_
                     |> interpolate "dataType" value.dataType
-                    |> interpolate "defaults" (String.join " " <| List.map (fieldDefault enumDefaults cyclicFields) value.fields)
-                    |> interpolate "fields" (String.join "\n        , " <| List.map (fieldDecoder enumDefaults cyclicFields) value.fields)
+                    |> interpolate "default"
+                        (case value.fields of
+                            [] ->
+                                value.dataType
+
+                            fields ->
+                                "(" ++ value.dataType ++ " " ++ (String.join " " <| List.map (fieldDefault enumDefaults cyclicFields) fields) ++ ")"
+                        )
+                    |> interpolate "fields"
+                        (case value.fields of
+                            [] ->
+                                "[]"
+
+                            fields ->
+                                "[ " ++ (String.join "\n        , " <| List.map (fieldDecoder enumDefaults cyclicFields) fields) ++ "\n        ]"
+                        )
                 ]
             , encoders =
                 [ """
-{{ header }}
-{{ encoder }} : {{ dataType }} -> Encode.Encoder
+{{ header }}{{ encoder }} : {{ dataType }} -> Encode.Encoder
 {{ encoder }} model =
     Encode.message
-        [ {{ fields }}
-        ]
+        {{ fields }}
             """
                     |> String.trim
                     |> interpolate "header"
                         (if value.isTopLevel then
-                            "{-| " ++ encoder_ ++ "\n-}"
+                            "{-| `" ++ value.dataType ++ "` encoder\n-}\n"
 
                          else
                             ""
                         )
                     |> interpolate "encoder" encoder_
                     |> interpolate "dataType" value.dataType
-                    |> interpolate "fields" (String.join "\n        , " <| List.map (fieldEncoder cyclicFields) value.fields)
+                    |> interpolate "fields"
+                        (case value.fields of
+                            [] ->
+                                "[]"
+
+                            fields ->
+                                "[ " ++ (String.join "\n        , " <| List.map (fieldEncoder cyclicFields) fields) ++ "\n        ]"
+                        )
                 ]
             , setters = List.map Tuple.first value.fields
             }
@@ -490,7 +513,7 @@ recursive cyclicFieldMap ( fieldName, field ) =
                     [ """
 unwrap{{ dataType }} : {{ dataType }} -> {{ fieldDataType }}
 unwrap{{ dataType }} ({{ dataType }} value) =
-   value
+    value
                                """
                         |> String.trim
                         |> interpolate "dataType" dataType
@@ -696,7 +719,7 @@ oneOfFieldDecoder lazy ( fieldNumber, dataType, fieldType ) =
     let
         decoderTemplate =
             if lazy then
-                "(Decode.lazy (\\_ -> Decode.map {{ dataType }} {{ fieldDecoder }}))"
+                "Decode.lazy (\\_ -> Decode.map {{ dataType }} {{ fieldDecoder }})"
 
             else
                 "Decode.map {{ dataType }} {{ fieldDecoder }}"
